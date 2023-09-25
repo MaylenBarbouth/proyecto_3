@@ -1,0 +1,73 @@
+# importar bibliotecas
+import cv2 as cv
+import numpy as np
+
+# VENTANAS
+window_name = 'threshold'
+
+# KERNEL
+kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+
+# TRACKBARS
+from trackBar import create_trackbar, on_trackbar, get_trackbar_value
+
+trackbar_window_name = 'Trackbars'
+cv.namedWindow(trackbar_window_name)
+
+max_value_thresh = 255
+thresh_name = 'Threshold'
+create_trackbar(thresh_name, trackbar_window_name, max_value_thresh)
+
+max_value_morph = 50
+opening_name = 'Opening'
+closing_name = 'Closing'
+create_trackbar(opening_name, trackbar_window_name, max_value_morph)
+create_trackbar(closing_name, trackbar_window_name, max_value_morph)
+
+# IMAGEN
+img = cv.imread('proyectos\proyecto3\levadura.png')
+img2 = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+while True:
+
+    # segmentación con threshold
+    thresh_value = get_trackbar_value(thresh_name, trackbar_window_name)
+    opening_value = get_trackbar_value(opening_name, trackbar_window_name)
+    closing_value = get_trackbar_value(closing_name, trackbar_window_name)
+
+    _, thresh = cv.threshold(img2, thresh_value, max_value_thresh, cv.THRESH_BINARY)
+    openinig = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, opening_value)
+    closing = cv.morphologyEx(openinig, cv.MORPH_OPEN, kernel, closing_value)
+
+    cv.imshow('threshold', thresh)
+    cv.imshow('opening', openinig) 
+    cv.imshow('closing', closing) # NO SE MODIFICA CON LA TRACKBAR
+
+    # semillas o marcadores
+    foreground = cv.erode(closing, kernel)
+    background = cv.dilate(closing, kernel)
+    unknown = cv.subtract(background, foreground)
+
+    # individualización con componentes conectados
+    number, markers = cv.connectedComponents(foreground)
+    markers = markers + 1 # para ponerle al fondo una semilla
+    markers[unknown == 255] = 0 # para marcar lo desconocido como desconocido (para watershed la etiqueta 0 es para lo que no tiene semilla)
+
+    map = np.uint8(255 * markers / number)
+    color_map = cv.applyColorMap(map, cv.COLORMAP_JET)
+    
+    numberSTR = str(number-1)
+    number_cell = 'cantidad celulas:'+ numberSTR
+    cv.putText(color_map, number_cell, (50, 50), cv.FONT_HERSHEY_SIMPLEX , 1, 0)
+
+    cv.imshow('color_map', color_map)
+    
+    # segmentación con watershed
+    markers = cv.watershed(img, markers) 
+    img[markers == -1] = [0,0,255] # se toma el área del borde como -1
+    cv.imshow('watershed', img)
+
+
+    tecla = cv.waitKey(30)  # espera 30 ms para que se presione una tecla . El mínimo es 1 ms.  tecla == 0 si no se pulsó ninguna.
+    if tecla == 27:	# tecla ESC para salir
+        break
